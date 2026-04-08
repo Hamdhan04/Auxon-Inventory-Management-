@@ -186,7 +186,7 @@ class InventoryEnv:
         cost_efficiency = self.cumulative_revenue / (self.cumulative_revenue + total_costs) \
             if (self.cumulative_revenue + total_costs) > 0 else 0.0
 
-        stockout_control = 1.0 - (self.cumulative_stockouts / current_step)
+        stockout_control = 1.0 - min(1.0, (self.cumulative_stockouts / current_step))
 
         total_capacity = sum(p['conf']['warehouse_capacity'] for p in self.products.values()) * current_step
 
@@ -214,7 +214,8 @@ class InventoryEnv:
             "step_reward_breakdown": {
                 "profit_score": max(0.01, min(0.99, (self.total_profit - stats["baseline"]) / (stats["optimal"] - stats["baseline"] + 1e-6))),
                 "cost_efficiency": max(0.01, min(0.99, cost_efficiency)),
-                "stockout_control": max(0.01, min(0.99, stockout_control))
+                "stockout_control": max(0.01, min(0.99, stockout_control)),
+                "decision_quality": max(0.01, min(0.99, decision_quality))
             },
             "cumulative_stats": {
                 "revenue": float(self.cumulative_revenue),
