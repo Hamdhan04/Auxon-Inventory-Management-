@@ -39,7 +39,7 @@ async def get_index():
 async def get_state():
     state = env.state()
     # Convert Pydantic models to dict for JSON serialization
-    serialized_state = {p_id: obs.dict() for p_id, obs in state.items()}
+    serialized_state = state
     return {
         "products": serialized_state,
         "total_profit": env.total_profit,
@@ -57,7 +57,7 @@ async def step_env(request: StepRequest):
     )
     next_obs, reward, done, info = env.step(action)
     
-    serialized_next_obs = {p_id: obs.dict() for p_id, obs in next_obs.items()}
+    serialized_next_obs = next_obs
     return {
         "next_state": serialized_next_obs,
         "reward": float(reward),
@@ -73,33 +73,33 @@ async def agent_step():
     state = env.state()
     product_ids = list(state.keys())
     # Pick a product that needs help most (lowest stock ratio)
-    target_p_id = min(product_ids, key=lambda p_id: state[p_id].current_stock / state[p_id].demand_rate if state[p_id].demand_rate > 0 else 999)
+    target_p_id = min(product_ids, key=lambda p_id: state[p_id]["current_stock"] / state[p_id]["demand_rate"] if state[p_id]["demand_rate"] > 0 else 999)
     obs = state[target_p_id]
     
     # Simple Heuristic with Reasoning
     reasoning = ""
-    if obs.current_stock < obs.demand_rate * 2:
+    if obs['current_stock'] < obs['demand_rate'] * 2:
         action_type = "restock"
-        quantity = int(obs.demand_rate * 5)
+        quantity = int(obs['demand_rate'] * 5)
         percentage = 0.0
-        reasoning = f"Demand ({obs.demand_rate:.0f}) > Stock ({obs.current_stock}), risk of stockout. Replenishing."
-    elif obs.current_stock > 800:
+        reasoning = f"Demand ({obs['demand_rate']:.0f}) > Stock ({obs['current_stock']}), risk of stockout. Replenishing."
+    elif obs['current_stock'] > 800:
         action_type = "reduce_price"
         quantity = 0
         percentage = 0.1
-        reasoning = f"Stock ({obs.current_stock}) is high (>800). Reducing price by 10% to stimulate demand."
+        reasoning = f"Stock ({obs['current_stock']}) is high (>800). Reducing price by 10% to stimulate demand."
     else:
         action_type = "do_nothing"
         quantity = 0
         percentage = 0.0
-        reasoning = f"Stock level ({obs.current_stock}) is healthy relative to demand ({obs.demand_rate:.0f})."
+        reasoning = f"Stock level ({obs['current_stock']}) is healthy relative to demand ({obs['demand_rate']:.0f})."
         
     action = Action(product_id=target_p_id, action_type=action_type, quantity=quantity, percentage=percentage)
     next_obs, reward, done, info = env.step(action)
     
-    serialized_next_obs = {p_id: obs.dict() for p_id, obs in next_obs.items()}
+    serialized_next_obs = next_obs
     return {
-        "action_taken": action.dict(),
+        "action_taken": action.model_dump(),
         "next_state": serialized_next_obs,
         "reward": float(reward),
         "reward_breakdown": info.get("step_reward_breakdown"),
@@ -109,16 +109,15 @@ async def agent_step():
     }
 
 @app.post("/reset")
-async def reset_env(request: ResetRequest):
+async def reset_env():
     global env
-    env = InventoryEnv(scenario_name=request.scenario)
+    env = InventoryEnv(scenario_name="medium")
     obs = env.reset()
-    serialized_obs = {p_id: o.dict() for p_id, o in obs.items()}
+    serialized_obs = obs
     return {
-        "state": serialized_obs,
-        "scenario": request.scenario
+        "observation": serialized_obs
     }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=7860)
