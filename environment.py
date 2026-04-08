@@ -9,6 +9,12 @@ from models import Observation, Action, Reward
 from scenarios import get_scenario_config
 from reward import compute_reward
 
+def safe_score(x):
+    import math
+    if x is None or math.isnan(x) or math.isinf(x):
+        return 0.5
+    return max(0.01, min(0.99, float(x)))
+
 
 class InventoryEnv:
     """
@@ -209,13 +215,15 @@ class InventoryEnv:
         else:
             efficiency_score = grade_hard(profit_metrics)
 
+        profit_norm = (self.total_profit - stats["baseline"]) / (stats["optimal"] - stats["baseline"] + 1e-6)
+
         info = {
             "total_profit": float(self.total_profit),
             "step_reward_breakdown": {
-                "profit_score": max(0.01, min(0.99, (self.total_profit - stats["baseline"]) / (stats["optimal"] - stats["baseline"] + 1e-6))),
-                "cost_efficiency": max(0.01, min(0.99, cost_efficiency)),
-                "stockout_control": max(0.01, min(0.99, stockout_control)),
-                "decision_quality": max(0.01, min(0.99, decision_quality))
+                    "profit_score": safe_score(profit_norm),
+                    "cost_efficiency": safe_score(cost_efficiency),
+                    "stockout_control": safe_score(stockout_control),
+                    "decision_quality": safe_score(decision_quality)
             },
             "cumulative_stats": {
                 "revenue": float(self.cumulative_revenue),
