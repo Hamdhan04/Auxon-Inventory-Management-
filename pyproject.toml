@@ -3,14 +3,19 @@ name = "auxon-inventory-management"
 version = "0.1.0"
 description = "RL-based Inventory Optimization using OpenEnv"
 authors = [
-    { name="Mohamed Hamdhan" }
+    { name = "Mohamed Hamdhan" }
 ]
+
 dependencies = [
     "fastapi",
     "uvicorn",
     "pydantic",
-    "numpy"
+    "numpy",
+    "openenv-core>=0.2.0"
 ]
+
+[project.scripts]
+server = "server.app:app"
 
 [tool.setuptools]
 packages = ["."]
