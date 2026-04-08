@@ -211,7 +211,11 @@ class InventoryEnv:
 
         info = {
             "total_profit": float(self.total_profit),
-            "step_reward_breakdown": total_step_breakdown,
+            "step_reward_breakdown": {
+                "profit_score": max(0.01, min(0.99, (self.total_profit - stats["baseline"]) / (stats["optimal"] - stats["baseline"] + 1e-6))),
+                "cost_efficiency": max(0.01, min(0.99, cost_efficiency)),
+                "stockout_control": max(0.01, min(0.99, stockout_control))
+            },
             "cumulative_stats": {
                 "revenue": float(self.cumulative_revenue),
                 "holding_cost": float(self.cumulative_holding_cost),
