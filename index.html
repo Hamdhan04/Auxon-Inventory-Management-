@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auxon Inventory Optimization - RL Environment</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #ff9900;
+            --primary-dark: #e68a00;
+            --bg: #0f1111;
+            --surface: #232f3e;
+            --card-bg: rgba(35, 47, 62, 0.7);
+            --text: #ffffff;
+            --text-dim: #a7afb7;
+            --success: #00a8e1;
+            --danger: #d63301;
+            --warning: #ffbd03;
+            --glass: rgba(255, 255, 255, 0.05);
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        header {
+            padding: 1.5rem 3rem;
+            background: linear-gradient(90deg, #232f3e 0%, #131921 100%);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            z-index: 100;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--primary);
+        }
+
+        .logo span {
+            color: var(--text);
+        }
+
+        nav {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .scenario-selector {
+            background: var(--glass);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            outline: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .scenario-selector:hover {
+            border-color: var(--primary);
+        }
+
+        main {
+            padding: 2rem 3rem;
+            display: grid;
+            grid-template-columns: 320px 1fr 350px;
+            gap: 2rem;
+            flex: 1;
+            height: calc(100vh - 80px);
+            overflow: hidden;
+        }
+
+        .info-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            overflow-y: auto;
+            padding-right: 0.5rem;
+        }
+
+        .info-section {
+            background: var(--glass);
+            border-radius: 16px;
+            padding: 1.25rem;
+            border: 1px solid var(--border);
+        }
+
+        .info-section h3 {
+            font-size: 0.9rem;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .info-content {
+            font-size: 0.85rem;
+            line-height: 1.5;
+            color: var(--text-dim);
+        }
+
+        .info-content strong {
+            color: var(--text);
+        }
+
+        .info-list {
+            list-style: none;
+            margin-top: 0.5rem;
+        }
+
+        .info-list li {
+            margin-bottom: 0.5rem;
+            display: flex;
+            gap: 0.5rem;
+            align-items: flex-start;
+        }
+
+        .info-list i {
+            color: var(--primary);
+            font-size: 0.75rem;
+            margin-top: 0.2rem;
+        }
+
+        .side-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            transition: transform 0.3s ease, border-color 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: transparent;
+            transition: background 0.3s ease;
+        }
+
+        .card:hover::before {
+            background: var(--primary);
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(255, 153, 0, 0.3);
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-dim);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .product-info h2 {
+            font-size: 2.5rem;
+            font-family: 'Outfit', sans-serif;
+            margin-bottom: 0.5rem;
+            color: var(--primary);
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .stat-item {
+            background: var(--glass);
+            padding: 1rem;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            margin-top: 0.25rem;
+        }
+
+        .progress-container {
+            margin-top: 1rem;
+        }
+
+        .progress-bar {
+            height: 10px;
+            background: var(--glass);
+            border-radius: 5px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary) 0%, #ffcc00 100%);
+            width: 0%;
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .feedback-card, .action-log-card {
+            height: 380px; /* Fixed height for ~6 items */
+            display: flex;
+            flex-direction: column;
+        }
+
+        .final-score-card {
+            display: flex;
+            flex-direction: column;
+            min-height: 250px;
+            margin-top: 1.5rem;
+        }
+
+        .feedback-list, .structured-log {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            padding-right: 0.5rem;
+        }
+
+        .feedback-msg {
+            padding: 0.75rem;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-left: 4px solid var(--text-dim);
+            animation: fadeIn 0.3s ease;
+        }
+
+        .feedback-msg.success { border-left-color: var(--success); color: #00e5ff; }
+        .feedback-msg.penalty { border-left-color: var(--danger); color: #ff5252; }
+        .feedback-msg.warning { border-left-color: var(--warning); color: #ffea00; }
+        .feedback-msg.highlight { background: rgba(0, 168, 225, 0.1); border: 1px dashed var(--success); }
+
+        .log-item {
+            padding: 0.75rem;
+            border-radius: 10px;
+            background: var(--glass);
+            border: 1px solid var(--border);
+            font-size: 0.8rem;
+        }
+
+        .log-item.current { border-color: var(--primary); background: rgba(255, 153, 0, 0.05); }
+
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.4rem;
+            font-weight: 700;
+        }
+
+        .log-reason {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            font-style: italic;
+        }
+
+        .score-display {
+            text-align: center;
+            padding: 1rem 0;
+        }
+
+        .score-big {
+            font-size: 4rem;
+            font-weight: 800;
+            font-family: 'Outfit', sans-serif;
+            color: var(--primary);
+            text-shadow: 0 0 20px rgba(255, 153, 0, 0.3);
+            margin: 0.5rem 0;
+        }
+
+        .score-metric {
+            margin-bottom: 1rem;
+        }
+
+        .metric-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            margin-bottom: 0.25rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-bar {
+            height: 6px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .metric-fill {
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            transition: width 1s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        label {
+            font-size: 0.85rem;
+            color: var(--text-dim);
+        }
+
+        input[type="number"], input[type="range"] {
+            background: var(--glass);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 0.75rem;
+            border-radius: 10px;
+            outline: none;
+        }
+
+        .btn-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+        }
+
+        button {
+            padding: 0.75rem 1rem;
+            border-radius: 10px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: scale(1.02);
+        }
+
+        .btn-secondary {
+            background: var(--glass);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: #fff;
+        }
+
+        .chart-container {
+            height: 300px;
+            position: relative;
+        }
+
+        .log-panel {
+            max-height: 100%;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .log-entry {
+            background: var(--glass);
+            padding: 0.75rem;
+            border-radius: 8px;
+            border-left: 3px solid var(--primary);
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .log-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            margin-bottom: 0.25rem;
+        }
+
+        .log-msg {
+            font-size: 0.85rem;
+        }
+
+        .overstock-warning {
+            color: var(--danger);
+            font-weight: 700;
+        }
+
+        .stockout-warning {
+            color: var(--warning);
+            font-weight: 700;
+        }
+
+        /* Modal Styling */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(8px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .modal {
+            background: #1a222c;
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 2.5rem;
+            max-width: 600px;
+            width: 90%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            transform: scale(0.9);
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .modal-overlay.active .modal {
+            transform: scale(1);
+        }
+
+        .grade-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            margin: 0 auto 1.5rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: var(--glass);
+            border: 4px solid var(--primary);
+            box-shadow: 0 0 30px rgba(255, 153, 0, 0.2);
+        }
+
+        .grade-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            font-family: 'Outfit', sans-serif;
+            color: var(--primary);
+        }
+
+        .grade-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .summary-item {
+            background: var(--glass);
+            padding: 1rem;
+            border-radius: 16px;
+        }
+
+        .tooltip {
+            position: relative;
+            cursor: help;
+        }
+
+        .tooltip:hover::after {
+            content: attr(data-tip);
+            position: absolute;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1a1a1a;
+            color: white;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            z-index: 100;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            border: 1px solid var(--border);
+        }
+
+        .log-reasoning {
+            font-size: 0.75rem;
+            color: var(--primary);
+            margin-top: 0.5rem;
+            font-style: italic;
+            border-top: 1px solid var(--border);
+            padding-top: 0.25rem;
+        }
+
+        .log-breakdown {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+        }
+
+        .breakdown-tag {
+            background: rgba(255,255,255,0.05);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .alert-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.65rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.8; }
+            50% { opacity: 1; transform: scale(1.05); }
+            100% { opacity: 0.8; }
+        }
+
+        .alert-stockout { background: var(--danger); color: white; }
+        .alert-overstock { background: var(--warning); color: black; }
+
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            background: var(--glass);
+            padding: 0.5rem 1rem;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        input[type="range"] {
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
+        /* Fixed scenario selector for dark theme */
+        .scenario-selector option {
+            background-color: #232f3e;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <i class="fas fa-warehouse"></i>
+            <span>Auxon Inventory <strong>Optimizer</strong></span>
+        </div>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            <div class="card" style="padding: 0.5rem 1rem; display: flex; gap: 1rem; align-items: center; margin-bottom: 0;">
+                <label style="margin: 0; font-weight: 600;">SIMULATION MODE:</label>
+                <div style="display: flex; background: var(--glass); border-radius: 8px; overflow: hidden; border: 1px solid var(--border);">
+                    <button id="modeManual" class="btn-mode active" onclick="setMode('manual')" style="border-radius: 0; padding: 0.4rem 1rem; font-size: 0.8rem;">
+                        <i class="fas fa-hand-pointer"></i> MANUAL
+                    </button>
+                    <button id="modeAgent" class="btn-mode" onclick="setMode('agent')" style="border-radius: 0; padding: 0.4rem 1rem; font-size: 0.8rem;">
+                        <i class="fas fa-robot"></i> AGENT
+                    </button>
+                </div>
+            </div>
+            <div class="speed-control">
+                <i class="fas fa-bolt" style="font-size: 0.8rem; color: var(--primary);"></i>
+                <label style="margin: 0; font-size: 0.75rem; white-space: nowrap;">SPEED:</label>
+                <input type="range" id="speedSlider" min="100" max="2000" step="100" value="1000" style="width: 80px;">
+            </div>
+            <select class="scenario-selector" id="scenarioSelect" onchange="resetSim()">
+                <option value="easy">Easy (Stable)</option>
+                <option value="medium" selected>Medium (Fluctuating)</option>
+                <option value="hard">Hard (Spiky)</option>
+            </select>
+            <button class="btn-danger" onclick="resetSim()">
+                <i class="fas fa-undo"></i> Reset
+            </button>
+        </div>
+    </header>
+
+    <main>
+        <!-- LEFT: Informational Panel -->
+        <div class="info-panel">
+            <div class="card" style="padding: 1.25rem; background: linear-gradient(135deg, rgba(255,153,0,0.1) 0%, rgba(35,47,62,0.7) 100%);">
+                <div class="card-title" style="color: var(--primary); font-size: 1.1rem; margin-bottom: 0.5rem;">
+                    <i class="fas fa-boxes"></i> How Optimizer Works
+                </div>
+                <p style="font-size: 0.8rem; line-height: 1.4; color: var(--text-dim);">
+                    An RL agent manages inventory for multiple products in an e-commerce system. It must balance stock levels, demand fluctuations, and pricing decisions to <strong>maximize profit</strong>.
+                </p>
+            </div>
+
+            <div class="info-section">
+                <h3><i class="fas fa-bullseye"></i> Goal</h3>
+                <div class="info-content">
+                    Maximize total profit across all products while avoiding stockouts and overstocking.
+                    <ul class="info-list">
+                        <li><i class="fas fa-check-circle"></i> Optimal stock levels</li>
+                        <li><i class="fas fa-check-circle"></i> Meet customer demand</li>
+                        <li><i class="fas fa-check-circle"></i> Minimize holding costs</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="info-section">
+                <h3><i class="fas fa-bolt"></i> Challenge</h3>
+                <div class="info-content">
+                    Each step represents a single day.
+                    <ul class="info-list">
+                        <li><i class="fas fa-exclamation-triangle"></i> Dynamic Demand (Spiky)</li>
+                        <li><i class="fas fa-exclamation-triangle"></i> Overstock Fees</li>
+                        <li><i class="fas fa-exclamation-triangle"></i> Stockout Penalties</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="info-section">
+                <h3><i class="fas fa-robot"></i> Agent Strategy</h3>
+                <div class="info-content">
+                    <span style="font-family: monospace; font-size: 0.75rem; background: var(--bg); padding: 2px 4px; border-radius: 4px;">restock &rarr; stabilize &rarr; do_nothing</span>
+                    <p style="margin-top: 0.5rem; font-size: 0.75rem;">
+                        <strong>Logics:</strong> If demand > stock, the agent triggers a restock to ensure availability.
+                    </p>
+                </div>
+            </div>
+
+            <div class="info-section">
+                <h3><i class="fas fa-gamepad"></i> Action Space</h3>
+                <div class="info-content">
+                    <ul class="info-list">
+                        <li><strong>Restock:</strong> Increase inventory</li>
+                        <li><strong>Do Nothing:</strong> Maintain level</li>
+                        <li><strong>Price Adj:</strong> Influence demand</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="info-section">
+                <h3><i class="fas fa-chart-line"></i> Reward Logic</h3>
+                <div class="info-content">
+                    <strong>Reward = Rev - (Hold + Stockout)</strong>
+                    <p style="font-size: 0.75rem; margin-top: 0.4rem;">
+                        Agents learn by correlates actions to future rewards.
+                    </p>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- CENTER: Product Grid & Dashboard -->
+        <div class="dashboard-area">
+            <div class="product-grid" id="productGrid">
+                <!-- 3 Product Cards will be injected here -->
+            </div>
+
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-title"><i class="fas fa-wave-square"></i> Inventory vs Demand</div>
+                <div class="chart-container">
+                    <canvas id="mainChart"></canvas>
+                </div>
+            </div>
+
+            <div class="dashboard-grid">
+                <!-- 1. FEEDBACK PANEL -->
+                <div class="card feedback-card">
+                    <div class="card-title"><i class="fas fa-satellite-dish"></i> Feedback</div>
+                    <div class="feedback-list" id="feedbackList">
+                        <div class="feedback-msg">Waiting for system initialization...</div>
+                    </div>
+                </div>
+
+                <!-- 2. ACTION LOG PANEL -->
+                <div class="card action-log-card">
+                    <div class="card-title"><i class="fas fa-clipboard-list"></i> Action Log</div>
+                    <div class="structured-log" id="structuredLog">
+                        <div class="feedback-msg" style="border: none; text-align: center;">No actions taken yet.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT: Controls & Logs -->
+        <div class="side-panel">
+            <div class="card">
+                <div class="card-title"><i class="fas fa-sliders-h"></i> Control Panel</div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>Target Product</label>
+                        <select id="productSelect" class="scenario-selector" style="width: 100%;">
+                            <!-- Options injected -->
+                        </select>
+                    </div>
+                    <div class="stat-grid" style="margin-top: 0.5rem;">
+                        <div class="stat-item" style="padding: 0.5rem;">
+                            <div class="stat-value" id="globalProfit">$0.00</div>
+                            <div class="stat-label">Total Profit</div>
+                        </div>
+                        <div class="stat-item" style="padding: 0.5rem;">
+                            <div class="stat-value" id="globalDays">0</div>
+                            <div class="stat-label">Days Left</div>
+                        </div>
+                    </div>
+                    <div id="manualControls">
+                        <div class="control-group" style="margin-top: 1rem;">
+                            <label>Action & Value</label>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <select id="actionType" class="scenario-selector" style="flex: 1;">
+                                    <option value="restock">Restock</option>
+                                    <option value="reduce_price">Reduce Price (10%)</option>
+                                    <option value="increase_price">Increase Price (10%)</option>
+                                    <option value="transfer_warehouse">Transfer Stock</option>
+                                    <option value="do_nothing">Do Nothing</option>
+                                </select>
+                                <input type="number" id="actionVal" value="50" style="width: 70px;">
+                            </div>
+                        </div>
+                        <button class="btn-primary" onclick="takeAction()" style="width: 100%; margin-top: 1rem;">
+                            <i class="fas fa-play"></i> EXECUTE STEP
+                        </button>
+                    </div>
+                    <div id="agentStatus" style="display: none; margin-top: 1rem; text-align: center; color: var(--success); font-weight: 600;">
+                        <i class="fas fa-spinner fa-spin"></i> AGENT IS RUNNING...
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. FINAL SCORE SUMMARY (Moved to Right Panel) -->
+            <div class="card final-score-card" id="finalScoreCard" style="display: none;">
+                <div class="card-title"><i class="fas fa-trophy"></i> Final Evaluation Score</div>
+                <div class="score-display">
+                    <div class="score-big" id="centerBigScore">0.00</div>
+                    <div class="grade-label">Agent Grade Metrics</div>
+                </div>
+                <div style="margin-top: 1rem;">
+                    <div class="score-metric">
+                        <div class="metric-header"><span>Profit Score</span><span id="scoreProfitVal">0%</span></div>
+                        <div class="metric-bar"><div class="metric-fill" id="fillProfit"></div></div>
+                    </div>
+                    <div class="score-metric">
+                        <div class="metric-header"><span>Cost Efficiency</span><span id="scoreEffVal">0%</span></div>
+                        <div class="metric-bar"><div class="metric-fill" id="fillEff"></div></div>
+                    </div>
+                    <div class="score-metric">
+                        <div class="metric-header"><span>Stockout Control</span><span id="scoreStockoutVal">0%</span></div>
+                        <div class="metric-bar"><div class="metric-fill" id="fillStockout"></div></div>
+                    </div>
+                    <div class="score-metric">
+                        <div class="metric-header"><span>Decision Quality</span><span id="scoreQualityVal">0%</span></div>
+                        <div class="metric-bar"><div class="metric-fill" id="fillQuality"></div></div>
+                    </div>
+                </div>
+                <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1rem; font-size: 0.8rem;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.4rem;">
+                        <span style="color: var(--text-dim);">Baseline (Random):</span>
+                        <span id="centerBaselineProfit" style="font-weight: 700;">$0</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.4rem;">
+                        <span style="color: var(--text-dim);">Agent Total:</span>
+                        <span id="centerTotalProfit" style="color: var(--primary); font-weight: 700;">$0</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 0.5rem; background: rgba(0, 168, 225, 0.1); border-radius: 6px; border: 1px dashed var(--success);">
+                        <span style="color: var(--success); font-weight: 700;">Improvement:</span>
+                        <span id="centerImprovementPercent" style="color: var(--success); font-weight: 800;">+0%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <!-- Final Summary Modal -->
+    <div class="modal-overlay" id="summaryModal">
+        <div class="modal">
+            <div class="grade-circle">
+                <div class="grade-value" id="finalGrade">A</div>
+                <div class="grade-label">Overall Score</div>
+            </div>
+            <h2 style="font-family: 'Outfit', sans-serif; margin-bottom: 1rem;">Simulation Complete!</h2>
+            <p style="color: var(--text-dim);">You managed the inventory for <span id="summaryDays" style="color: white; font-weight: 700;">0</span> days.</p>
+            
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <div class="stat-value" id="finalProfit">$0.00</div>
+                    <div class="stat-label">Agent Profit</div>
+                </div>
+                <div class="summary-item">
+                    <div class="stat-value" id="finalImprovement" style="color: var(--success);">+0%</div>
+                    <div class="stat-label">Improvement</div>
+                </div>
+                <div class="summary-item">
+                    <div class="stat-value" id="summaryStockouts" style="color: var(--danger);">0</div>
+                    <div class="stat-label">Stockout Days</div>
+                </div>
+                <div class="summary-item">
+                    <div class="stat-value" id="summaryOverstock" style="color: var(--warning);">0</div>
+                    <div class="stat-label">Overstock Units</div>
+                </div>
+            </div>
+
+            <div style="background: var(--glass); padding: 1rem; border-radius: 12px; margin-bottom: 2rem; border: 1px solid var(--primary);">
+                <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.5rem; text-transform: uppercase;">Performance vs. Baseline</div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 600;">Agent / Manual</span>
+                    <span id="agentPerf" style="color: var(--success); font-weight: 700;">$0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
+                    <span style="color: var(--text-dim);">Static Baseline</span>
+                    <span id="baselinePerf">$0</span>
+                </div>
+            </div>
+
+            <button class="btn-primary" onclick="closeModal()" style="width: 100%; padding: 1rem;">
+                <i class="fas fa-undo"></i> Start New Challenge
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let chart;
+        let historyData = { steps: [], series: {} }; // p_id -> {stock: [], demand: []}
+        let simMode = 'manual';
+        let agentInterval = null;
+
+        function setMode(mode) {
+            simMode = mode;
+            document.getElementById('modeManual').classList.toggle('active', mode === 'manual');
+            document.getElementById('modeAgent').classList.toggle('active', mode === 'agent');
+            document.getElementById('manualControls').style.display = mode === 'manual' ? 'block' : 'none';
+            document.getElementById('agentStatus').style.display = mode === 'agent' ? 'block' : 'none';
+
+            if (mode === 'agent') {
+                startAgent();
+            } else {
+                stopAgent();
+            }
+        }
+
+        function startAgent() {
+            if (agentInterval) return;
+            const runStep = async () => {
+                if (simMode !== 'agent') return;
+                const resp = await fetch('/agent-step', { method: 'POST' });
+                const result = await resp.json();
+                processResult('agent', result);
+                
+                if (result.done) {
+                    stopAgent();
+                } else {
+                    const speed = 2100 - parseInt(document.getElementById('speedSlider').value);
+                    agentInterval = setTimeout(runStep, speed);
+                }
+            };
+            agentInterval = setTimeout(runStep, 500);
+        }
+
+        function stopAgent() {
+            clearTimeout(agentInterval);
+            agentInterval = null;
+        }
+
+        async function updateUI() {
+            const resp = await fetch('/state');
+            const data = await resp.json();
+            
+            const grid = document.getElementById('productGrid');
+            const select = document.getElementById('productSelect');
+            
+            // Only rebuild if products changed (reset)
+            if (grid.children.length === 0) {
+                grid.innerHTML = '';
+                select.innerHTML = '';
+                Object.keys(data.products).forEach(p_id => {
+                    const option = document.createElement('option');
+                    option.value = p_id;
+                    option.innerText = p_id;
+                    select.appendChild(option);
+                });
+            }
+
+            Object.entries(data.products).forEach(([p_id, p]) => {
+                let card = document.getElementById(`card-${p_id}`);
+                if (!card) {
+                    card = document.createElement('div');
+                    card.id = `card-${p_id}`;
+                    card.className = 'card product-info';
+                    card.style.margin = '0';
+                    grid.appendChild(card);
+                }
+
+                const capacity = p.warehouse_capacity_remaining + p.current_stock;
+                const totalCap = capacity;
+                const stockPct = (p.current_stock / totalCap) * 100;
+                
+                let barColor = 'linear-gradient(90deg, var(--primary) 0%, #ffcc00 100%)';
+                let alertHtml = '';
+                
+                if (stockPct > 80) {
+                    barColor = 'var(--danger)';
+                    alertHtml = '<div class="alert-badge alert-overstock">Overstock Warning</div>';
+                }
+                if (p.current_stock < p.demand_rate * 2) {
+                    barColor = 'var(--warning)';
+                    alertHtml = '<div class="alert-badge alert-stockout">Stockout Risk</div>';
+                }
+                if (p.current_stock === 0) {
+                    alertHtml = '<div class="alert-badge alert-stockout">Out of Stock</div>';
+                }
+
+                card.innerHTML = `
+                    ${alertHtml}
+                    <div class="card-title"><i class="fas fa-box"></i> ${p_id}</div>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 0.5rem;">
+                         <h2 class="tooltip" data-tip="Current Selling Price" style="font-size: 1.5rem;">$${p.product_price.toFixed(2)}</h2>
+                         <div class="tooltip" data-tip="Forecasted daily demand" style="font-size: 0.8rem; color: var(--text-dim)">Demand: ${p.demand_rate.toFixed(0)}</div>
+                    </div>
+                    <div class="stat-grid" style="grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                        <div class="stat-item tooltip" data-tip="Units in Auxon warehouse" style="padding: 0.4rem;">
+                            <div style="font-size: 1rem; font-weight: 700;">${p.current_stock}</div>
+                            <div class="stat-label">Stock</div>
+                        </div>
+                        <div class="stat-item tooltip" data-tip="Total lost sales due to no stock" style="padding: 0.4rem;">
+                            <div style="font-size: 1rem; font-weight: 700; color: ${p.unmet_demand > 0 ? 'var(--danger)' : 'var(--success)'}">${p.unmet_demand}</div>
+                            <div class="stat-label">Stockout</div>
+                        </div>
+                    </div>
+                    <div class="progress-container" style="margin-top: 0.75rem;">
+                        <div class="progress-bar" style="height: 6px;">
+                            <div class="progress-fill" style="width: ${stockPct}%; background: ${barColor}"></div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            // Action constraints
+            const targetP = data.products[document.getElementById('productSelect').value];
+            if (targetP) {
+                 const actionTypeSelect = document.getElementById('actionType');
+                 const isOut = targetP.current_stock === 0;
+                 const isFull = targetP.warehouse_capacity_remaining <= 0;
+                 
+                 // If out of stock, disable price reduction
+                 actionTypeSelect.options[1].disabled = isOut;
+                 // If full, disable restock
+                 actionTypeSelect.options[0].disabled = isFull;
+            }
+
+            document.getElementById('globalProfit').innerText = `$${data.total_profit.toFixed(2)}`;
+            document.getElementById('globalDays').innerText = data.days_left;
+
+            return data;
+        }
+
+        async function takeAction() {
+            const p_id = document.getElementById('productSelect').value;
+            const type = document.getElementById('actionType').value;
+            const val = parseFloat(document.getElementById('actionVal').value);
+            
+            const payload = {
+                product_id: p_id,
+                action_type: type,
+                quantity: type === 'restock' || type === 'transfer_warehouse' ? parseInt(val) : 0,
+                percentage: type === 'reduce_price' || type === 'increase_price' ? 0.1 : 0.0
+            };
+
+            const resp = await fetch('/step', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await resp.json();
+            
+            processResult(type, result, p_id);
+        }
+
+        function processResult(type, result, manual_p_id) {
+            addLog(type, result, manual_p_id);
+            updateCharts(result);
+            updateUI();
+            
+            // 1. UPDATE FEEDBACK PANEL
+            const reward = result.reward || 0;
+            const target_id = manual_p_id || (result.action_taken ? result.action_taken.product_id : 'System');
+            const action_name = (type === 'agent' ? result.action_taken.action_type : type).replace('_', ' ').toUpperCase();
+            
+            let status = 'success';
+            if (reward < 0) status = 'penalty';
+            else if (reward === 0) status = 'warning';
+            
+            const msg = `[${target_id}] ${action_name} executed. Reward: $${reward.toFixed(0)}`;
+            updateFeedback(msg, status);
+
+            if (result.done) {
+                updateFeedback("--- EPISODE COMPLETE ---", "highlight");
+                showFinalSummary(result.info);
+                setMode('manual');
+            }
+        }
+
+        function updateFeedback(msg, type = '') {
+            const list = document.getElementById('feedbackList');
+            const item = document.createElement('div');
+            item.className = `feedback-msg ${type}`;
+            item.innerText = msg;
+            list.prepend(item);
+            
+            if (list.children.length > 10) list.removeChild(list.lastChild);
+        }
+
+        function showFinalSummary(info) {
+            const stats = info.cumulative_stats || {};
+            const finalScore = stats.efficiency_score || 0;
+            const baseline = stats.baseline_profit || 0;
+            const agentTotal = info.total_profit || 0;
+            const subMetrics = stats.profit_metrics || {};
+            
+            // Calculate Improvement
+            const diff = agentTotal - baseline;
+            // Avoid division by zero and handle baseline = 0
+            const improvement = baseline > 0 ? (diff / baseline) * 100 : 0;
+            const improvementStr = (improvement >= 0 ? '+' : '') + improvement.toFixed(0) + '%';
+            
+            // Descriptive labels
+            let label = "Moderate";
+            if (finalScore > 0.9) label = "Excellent";
+            else if (finalScore > 0.75) label = "Good";
+            else if (finalScore > 0.5) label = "Solid";
+            else if (finalScore < 0.3) label = "Poor";
+
+            // 1. UPDATE CENTER FINAL SCORE PANEL
+            const card = document.getElementById('finalScoreCard');
+            card.style.display = 'flex';
+            card.style.animation = 'glow 2s infinite alternate';
+            
+            document.getElementById('centerBigScore').innerText = `${finalScore.toFixed(2)} (${label})`;
+            document.getElementById('centerBaselineProfit').innerText = `$${baseline.toLocaleString()}`;
+            document.getElementById('centerTotalProfit').innerText = `$${agentTotal.toLocaleString()}`;
+            document.getElementById('centerImprovementPercent').innerText = improvementStr;
+
+            // 2. Update Modal
+            document.getElementById('finalGrade').innerText = finalScore.toFixed(2);
+            document.getElementById('finalProfit').innerText = `$${agentTotal.toLocaleString()}`;
+            document.getElementById('finalImprovement').innerText = improvementStr;
+            document.getElementById('summaryStockouts').innerText = stats.stockout_days || 0;
+            document.getElementById('summaryOverstock').innerText = stats.overstock_units || 0;
+
+            // 3. Progress Bars (Reflect the REAL sub-metrics)
+            // profit, eff, stockout, quality
+            const metrics = {
+                profit: (subMetrics.profit - baseline) / (stats.optimal_profit - baseline) * 100,
+                eff: subMetrics.cost_efficiency * 100,
+                stockout: subMetrics.stockout_control * 100,
+                quality: subMetrics.decision_quality * 100
+            };
+
+            for (const [key, val] of Object.entries(metrics)) {
+                const fill = document.getElementById(`fill${key.charAt(0).toUpperCase() + key.slice(1)}`);
+                const text = document.getElementById(`score${key.charAt(0).toUpperCase() + key.slice(1)}Val`);
+                if (fill && text) {
+                    const clampedVal = Math.max(0, Math.min(100, val));
+                    fill.style.width = `${clampedVal}%`;
+                    text.innerText = `${clampedVal.toFixed(0)}%`;
+                }
+            }
+        }
+
+        // Add glow animation to CSS
+        const style = document.createElement('style');
+        style.innerHTML = `
+            @keyframes glow {
+                from { box-shadow: 0 0 10px rgba(255, 153, 0, 0.2); border-color: rgba(255, 153, 0, 0.3); }
+                to { box-shadow: 0 0 30px rgba(255, 153, 0, 0.5); border-color: var(--primary); }
+            }
+        `;
+        document.head.appendChild(style);
+
+        function closeModal() {
+            document.getElementById('summaryModal').classList.remove('active');
+            resetSim();
+        }
+
+        function addLog(type, result, p_id) {
+            const logPanel = document.getElementById('structuredLog');
+            const step = historyData.steps.length + 1;
+            
+            // Clear placeholder
+            if (step === 1) logPanel.innerHTML = '';
+
+            const entry = document.createElement('div');
+            entry.className = 'log-item current';
+            
+            // Remove 'current' class from previous logs
+            document.querySelectorAll('.log-item').forEach(el => el.classList.remove('current'));
+            
+            const target_id = p_id || (result.action_taken ? result.action_taken.product_id : 'Auto');
+            const reward = result.reward || 0;
+            const action_type = (type === 'agent' ? result.action_taken.action_type : type).replace('_', ' ').toUpperCase();
+            const icon = action_type.includes('RESTOCK') ? '⚡' : '⏸';
+
+            entry.innerHTML = `
+                <div class="log-header">
+                    <span>${icon} [Step ${step}] ${action_type} (${target_id})</span>
+                    <span style="color: ${reward >= 0 ? 'var(--success)' : 'var(--danger)'}">${reward >= 0 ? '+' : ''}$${reward.toFixed(0)}</span>
+                </div>
+                <div class="log-reason">
+                    &rarr; Reason: ${result.reasoning}
+                </div>
+            `;
+            
+            logPanel.prepend(entry);
+            
+            // Keep only last 20 logs
+            if (logPanel.children.length > 20) {
+                logPanel.removeChild(logPanel.lastChild);
+            }
+        }
+
+        function updateCharts(result) {
+            const step = historyData.steps.length;
+            historyData.steps.push(step);
+            
+            if (!historyData.meta) {
+                historyData.meta = { profit: [], reward: [] };
+                chart.data.datasets.push({
+                    label: `Step Reward`,
+                    data: historyData.meta.reward,
+                    borderColor: '#00a8e1',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    tension: 0.4,
+                    fill: false,
+                    yAxisID: 'y1'
+                });
+                chart.data.datasets.push({
+                    label: `Profit`,
+                    data: historyData.meta.profit,
+                    borderColor: '#ff9900',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    backgroundColor: 'rgba(255, 153, 0, 0.05)',
+                    yAxisID: 'y'
+                });
+            }
+
+            historyData.meta.profit.push(result.info.total_profit);
+            historyData.meta.reward.push(result.reward);
+            
+            Object.entries(result.next_state).forEach(([p_id, p]) => {
+                if (!historyData.series[p_id]) {
+                    historyData.series[p_id] = { stock: [], demand: [] };
+                    // We'll only show profit and reward on the main chart to avoid clutter, 
+                    // or we can keep stock if the user wants. 
+                    // Let's stick to Profit/Reward as requested for "Smarter Graph".
+                }
+                // historyData.series[p_id].stock.push(p.current_stock);
+            });
+            
+            chart.update();
+        }
+
+        function getRandomColor() {
+            const colors = ['#ff9900', '#00a8e1', '#00ffcc', '#ff3366', '#9933ff'];
+            const idx = Object.keys(historyData.series).length % colors.length;
+            return colors[idx];
+        }
+
+        async function resetSim() {
+            const scenario = document.getElementById('scenarioSelect').value;
+            await fetch('/reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ scenario })
+            });
+            
+            document.getElementById('feedbackList').innerHTML = '<div class="feedback-msg">Simulation Reset.</div>';
+            document.getElementById('structuredLog').innerHTML = '<div class="feedback-msg" style="border: none; text-align: center;">No actions taken yet.</div>';
+            document.getElementById('finalScoreCard').style.display = 'none';
+            document.getElementById('productGrid').innerHTML = '';
+            historyData = { steps: [], series: {} };
+            initCharts();
+            await updateUI();
+        }
+
+        function initCharts() {
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            if (chart) chart.destroy();
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: historyData.steps,
+                    datasets: []
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { 
+                        legend: { 
+                            position: 'top',
+                            align: 'end',
+                            labels: { color: '#a7afb7', boxWidth: 10, font: { size: 11, weight: 'bold' } } 
+                        } 
+                    },
+                    scales: {
+                        x: { display: false },
+                        y: { 
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#a7afb7', font: { size: 10 } },
+                            title: { display: true, text: 'Total Profit ($)', color: '#ff9900' }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#a7afb7', font: { size: 10 } },
+                            title: { display: true, text: 'Step Reward ($)', color: '#00a8e1' }
+                        }
+                    }
+                }
+            });
+        }
+
+        window.onload = async () => {
+            initCharts();
+            await updateUI();
+        };
+    </script>
+    <style>
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+        }
+        .btn-mode {
+            background: transparent;
+            color: var(--text-dim);
+            transition: all 0.2s ease;
+        }
+        .btn-mode.active {
+            background: var(--primary);
+            color: #000;
+        }
+        .dashboard-area {
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+</body>
+</html>

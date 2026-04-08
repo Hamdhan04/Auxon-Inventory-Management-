@@ -1,0 +1,9 @@
+name: auxon-inventory-env
+description: RL environment for inventory optimization
+version: 1.0
+
+observation_model: Observation
+action_model: Action
+reward_model: Reward
+
+entrypoint: environment.py
