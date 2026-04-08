@@ -37,8 +37,8 @@ def run_inference():
 
     while not done and step_count <= max_steps:
         # Calculate totals for fallback logic
-        total_stock = sum(obs.current_stock for obs in obs_batch.values())
-        total_demand = sum(obs.demand_rate for obs in obs_batch.values())
+        total_stock = sum(obs["current_stock"] for obs in obs_batch.values())
+        total_demand = sum(obs["demand_rate"] for obs in obs_batch.values())
 
         action_type = "do_nothing" # Default
 
@@ -77,7 +77,7 @@ def run_inference():
         target_p_id = list(obs_batch.keys())[0]
         min_ratio = float('inf')
         for p_id, obs in obs_batch.items():
-            ratio = obs.current_stock / obs.demand_rate if obs.demand_rate > 0 else 999
+            ratio = obs["current_stock"] / obs["demand_rate"] if obs["demand_rate"] > 0 else 999
             if ratio < min_ratio:
                 min_ratio = ratio
                 target_p_id = p_id
@@ -87,7 +87,7 @@ def run_inference():
         if action_type == "restock":
             # Simple heuristic: Restock 5 days worth of demand for the target product
             tgt_obs = obs_batch[target_p_id]
-            quantity = max(100, int(tgt_obs.demand_rate * 5))
+            quantity = max(100, int(tgt_obs["demand_rate"] * 5))
             
         action_obj = Action(
             product_id=target_p_id,
