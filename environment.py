@@ -195,23 +195,26 @@ class InventoryEnv:
 
         total_costs = self.cumulative_holding_cost + self.cumulative_stockout_penalty + self.cumulative_overstock_units * 2.0
 
-        if self.cumulative_revenue <= 0:
-            cost_efficiency = 0.5
-        else:
-            cost_efficiency = self.cumulative_revenue / (self.cumulative_revenue + total_costs + 1e-6)
+        denominator = self.cumulative_revenue + total_costs + 1e-6
 
-        cost_efficiency = max(0.001, min(cost_efficiency, 0.999))
+        cost_efficiency = (self.cumulative_revenue + 1e-6) / denominator
 
-        stock_ratio = self.cumulative_stockouts / (current_step + 1e-6)
-        stock_ratio = max(0.0, min(stock_ratio, 1.0))
+        # 🔒 HARD CLAMP (FINAL FIX)
+        if cost_efficiency >= 1.0:
+            cost_efficiency = 0.999
+        elif cost_efficiency <= 0.0:
+            cost_efficiency = 0.001
+
+        stock_ratio = (self.cumulative_stockouts + 1e-6) / (current_step + 1e-6)
+        stock_ratio = max(0.001, min(stock_ratio, 0.999))
 
         stockout_control = 1.0 - stock_ratio
         stockout_control = max(0.001, min(stockout_control, 0.999))
 
         total_capacity = sum(p['conf']['warehouse_capacity'] for p in self.products.values()) * current_step
 
-        overstock_ratio = self.cumulative_overstock_units / (total_capacity + 1e-6)
-        overstock_ratio = max(0.0, min(overstock_ratio, 1.0))
+        overstock_ratio = (self.cumulative_overstock_units + 1e-6) / (total_capacity + 1e-6)
+        overstock_ratio = max(0.001, min(overstock_ratio, 0.999))
 
         decision_quality = 1.0 - overstock_ratio
         decision_quality = max(0.001, min(decision_quality, 0.999))
