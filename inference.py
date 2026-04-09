@@ -7,8 +7,8 @@ from environment import InventoryEnv
 from models import Action
 
 # 1. Environment Variable Configuration
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct:novita")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 # HF_TOKEN is mandatory according to guidelines
@@ -84,6 +84,7 @@ def run_scenario(client, scenario_id, seed=42):
             if is_last_step:
                 # Use the heavily clamped efficiency_score from environment.py
                 current_normalized_reward = info.get("cumulative_stats", {}).get("efficiency_score", 0.5)
+                current_normalized_reward = max(0.011, min(0.989, float(current_normalized_reward)))
             
             rewards_history.append(current_normalized_reward)
             
