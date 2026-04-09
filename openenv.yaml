@@ -1,9 +1,23 @@
-name: auxon-inventory-env
-description: RL environment for inventory optimization
-version: 1.0
+version: "1.0"
+name: "auxon-inventory-env"
+description: "RL environment for inventory optimization"
 
 observation_model: Observation
 action_model: Action
 reward_model: Reward
 
 entrypoint: environment.py
+
+tasks:
+  - id: "easy"
+    name: "Auxon Basics - Easy"
+    difficulty: "easy"
+    grader: "scenarios.grade_easy"
+  - id: "medium"
+    name: "Seasonal Demand - Medium"
+    difficulty: "medium"
+    grader: "scenarios.grade_medium"
+  - id: "hard"
+    name: "Mega Sale Day - Hard"
+    difficulty: "hard"
+    grader: "scenarios.grade_hard"
