@@ -81,7 +81,24 @@ def run_scenario(client, scenario, seed=42):
         step_count += 1
 
     # Extract grader score — always strictly within (0, 1)
-    efficiency_score = info.get("cumulative_stats", {}).get("efficiency_score", 0.5)
+    raw_score = info.get("cumulative_stats", {}).get("efficiency_score", 0.5)
+
+    # 🔒 HARD CLAMP (ABSOLUTE FINAL FIX)
+    if raw_score is None:
+        raw_score = 0.5
+
+    try:
+        raw_score = float(raw_score)
+    except:
+        raw_score = 0.5
+
+    # Strict OpenEnv range enforcement
+    if raw_score <= 0.0:
+        efficiency_score = 0.01
+    elif raw_score >= 1.0:
+        efficiency_score = 0.99
+    else:
+        efficiency_score = raw_score
 
     print(f"[SCORE] scenario={scenario} score={efficiency_score:.4f}")
     print(f"[END] scenario={scenario}")
