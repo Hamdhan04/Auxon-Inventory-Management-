@@ -92,10 +92,13 @@ def compute_weighted_score(profit_metrics, scenario):
     return round(final_score, 4)
 
 def grade_easy(profit_metrics):
-    return compute_weighted_score(profit_metrics, "easy")
+    score = compute_weighted_score(profit_metrics, "easy")
+    return max(0.011, min(0.989, float(score)))
 
 def grade_medium(profit_metrics):
-    return compute_weighted_score(profit_metrics, "medium")
+    score = compute_weighted_score(profit_metrics, "medium")
+    return max(0.011, min(0.989, float(score)))
 
 def grade_hard(profit_metrics):
-    return compute_weighted_score(profit_metrics, "hard")
+    score = compute_weighted_score(profit_metrics, "hard")
+    return max(0.011, min(0.989, float(score)))
