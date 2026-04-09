@@ -14,12 +14,16 @@ def safe_score(x):
     try:
         x = float(x)
     except:
-        return 0.5
+        x = 0.5
 
     if math.isnan(x) or math.isinf(x):
-        return 0.5
+        x = 0.5
 
-    return max(0.001, min(0.999, x))
+    if x <= 0.0:
+        return 0.01
+    elif x >= 1.0:
+        return 0.99
+    return x
 
 
 class InventoryEnv:
