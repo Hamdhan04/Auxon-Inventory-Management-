@@ -80,11 +80,15 @@ def run_scenario(client, scenario_id, seed=42):
             # so the total task reward is exactly the normalized score.
             is_last_step = (step_count == max_steps) or env_done
             
-            current_normalized_reward = 0.00
             if is_last_step:
-                # Use the heavily clamped efficiency_score from environment.py
                 current_normalized_reward = info.get("cumulative_stats", {}).get("efficiency_score", 0.5)
                 current_normalized_reward = max(0.011, min(0.989, float(current_normalized_reward)))
+            else:
+                step_profit = info.get("total_profit", 0)
+                baseline = info.get("cumulative_stats", {}).get("baseline_profit", 800)
+                optimal = info.get("cumulative_stats", {}).get("optimal_profit", 2200)
+                raw = (step_profit - baseline) / (optimal - baseline + 1e-6)
+                current_normalized_reward = max(0.011, min(0.989, float(raw)))
             
             rewards_history.append(current_normalized_reward)
             
