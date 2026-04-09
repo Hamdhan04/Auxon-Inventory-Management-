@@ -11,9 +11,15 @@ from reward import compute_reward
 
 def safe_score(x):
     import math
-    if x is None or math.isnan(x) or math.isinf(x):
+    try:
+        x = float(x)
+    except:
         return 0.5
-    return max(0.01, min(0.99, float(x)))
+
+    if math.isnan(x) or math.isinf(x):
+        return 0.5
+
+    return max(0.001, min(0.999, x))
 
 
 class InventoryEnv:
@@ -189,15 +195,25 @@ class InventoryEnv:
 
         total_costs = self.cumulative_holding_cost + self.cumulative_stockout_penalty + self.cumulative_overstock_units * 2.0
 
-        cost_efficiency = self.cumulative_revenue / (self.cumulative_revenue + total_costs + 1e-6)
+        if self.cumulative_revenue <= 0:
+            cost_efficiency = 0.5
+        else:
+            cost_efficiency = self.cumulative_revenue / (self.cumulative_revenue + total_costs + 1e-6)
+
         cost_efficiency = max(0.001, min(cost_efficiency, 0.999))
 
-        stockout_control = 1.0 - min(1.0, (self.cumulative_stockouts / (current_step + 1e-6)))
+        stock_ratio = self.cumulative_stockouts / (current_step + 1e-6)
+        stock_ratio = max(0.0, min(stock_ratio, 1.0))
+
+        stockout_control = 1.0 - stock_ratio
         stockout_control = max(0.001, min(stockout_control, 0.999))
 
         total_capacity = sum(p['conf']['warehouse_capacity'] for p in self.products.values()) * current_step
 
-        decision_quality = 1.0 - min(1.0, (self.cumulative_overstock_units / (total_capacity + 1e-6)))
+        overstock_ratio = self.cumulative_overstock_units / (total_capacity + 1e-6)
+        overstock_ratio = max(0.0, min(overstock_ratio, 1.0))
+
+        decision_quality = 1.0 - overstock_ratio
         decision_quality = max(0.001, min(decision_quality, 0.999))
 
         profit_metrics = {
@@ -216,7 +232,27 @@ class InventoryEnv:
         else:
             efficiency_score = grade_hard(profit_metrics)
 
-        profit_norm = (self.total_profit - stats["baseline"]) / (stats["optimal"] - stats["baseline"] + 1e-6)
+        try:
+            profit_norm = (self.total_profit - stats["baseline"]) / (stats["optimal"] - stats["baseline"] + 1e-6)
+        except:
+            profit_norm = 0.5
+
+        # 🔒 HARD STABILIZATION (VERY IMPORTANT)
+        if profit_norm != profit_norm:  # NaN check
+            profit_norm = 0.5
+
+        profit_norm = max(0.001, min(profit_norm, 0.999))
+
+        # 🔒 FINAL CLAMP (CRITICAL)
+        try:
+            efficiency_score = float(efficiency_score)
+        except:
+            efficiency_score = 0.5
+
+        if efficiency_score <= 0.0:
+            efficiency_score = 0.01
+        elif efficiency_score >= 1.0:
+            efficiency_score = 0.99
 
         info = {
             "total_profit": float(self.total_profit),
@@ -232,7 +268,7 @@ class InventoryEnv:
                 "stockout_penalty": float(self.cumulative_stockout_penalty),
                 "stockout_days": self.cumulative_stockouts,
                 "overstock_units": int(self.cumulative_overstock_units),
-                "efficiency_score": float(efficiency_score),
+                "efficiency_score": efficiency_score,
                 "profit_metrics": profit_metrics,
                 "baseline_profit": float(stats["baseline"]),
                 "optimal_profit": float(stats["optimal"])
