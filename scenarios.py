@@ -1,5 +1,6 @@
 import random
 import numpy as np
+import math
 
 random.seed(42)
 np.random.seed(42)
@@ -84,7 +85,11 @@ def compute_weighted_score(profit_metrics, scenario):
     )
     
     # Final check: Score must be strictly between 0 and 1 (exclusive).
-    return round(max(0.001, min(0.999, final_score)), 4)
+    if math.isnan(final_score) or math.isinf(final_score):
+        final_score = 0.5
+
+    final_score = max(0.01, min(0.99, final_score))
+    return round(final_score, 4)
 
 def grade_easy(profit_metrics):
     return compute_weighted_score(profit_metrics, "easy")
