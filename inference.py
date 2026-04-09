@@ -93,7 +93,10 @@ def run_scenario(client, scenario, seed=42):
         raw_score = 0.5
 
     # Strict OpenEnv range enforcement
-    if raw_score <= 0.0:
+    import math
+    if math.isnan(raw_score) or math.isinf(raw_score):
+        efficiency_score = 0.5
+    elif raw_score <= 0.0:
         efficiency_score = 0.01
     elif raw_score >= 1.0:
         efficiency_score = 0.99
