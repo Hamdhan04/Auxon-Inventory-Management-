@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, List
 
+
 class Observation(BaseModel):
     product_id: str
     current_stock: int
@@ -12,14 +13,17 @@ class Observation(BaseModel):
     unmet_demand: int
     holding_cost: float
 
+
 class Action(BaseModel):
-    product_id: str  # ID of the product this action applies to
+    product_id: str
     action_type: str  # restock, reduce_price, increase_price, transfer_warehouse, do_nothing
     quantity: int = 0
     percentage: float = 0.0
 
+
 class Reward(BaseModel):
     value: float
+    score: float = 0.5        # ✅ ADDED — normalized (0.01, 0.99) score for grader
     revenue: float
     restock_cost: float
     storage_cost: float
