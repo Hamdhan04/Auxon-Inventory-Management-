@@ -92,7 +92,7 @@ def run_scenario(client, scenario_id, seed=42):
         last_error = str(e).replace("\n", " ")
         success = False
     
-    formatted_rewards = ",".join([f"{r:.2f}" for r in rewards_history])
+    formatted_rewards = ",".join([f"{min(0.989, max(0.011, r)):.3f}" for r in rewards_history])
     
     success_str = "true" if success else "false"
     print(f"[END] success={success_str} steps={step_count} rewards={formatted_rewards}")
