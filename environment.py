@@ -99,7 +99,6 @@ class InventoryEnv:
         )
 
     def _get_full_observation(self):
-        # 🔥 FIX: return dict (important for FastAPI + OpenEnv)
         return {p_id: self._get_product_observation(p_id).dict() for p_id in self.products}
 
     def step(self, action: Action):
@@ -108,7 +107,6 @@ class InventoryEnv:
 
         target_p_id = action.product_id
 
-        # 1. Apply action
         if target_p_id in self.products:
             p = self.products[target_p_id]
 
@@ -126,7 +124,6 @@ class InventoryEnv:
             elif action.action_type == 'transfer_warehouse':
                 p['stock'] = max(0, p['stock'] - action.quantity)
 
-        # 2. Advance simulation
         total_step_reward = 0
         total_step_breakdown = {
             "revenue": 0,
@@ -153,22 +150,20 @@ class InventoryEnv:
             if p['unmet_demand'] > 0:
                 any_stockout = True
 
-            # Overstock tracking
             threshold = p['conf']['warehouse_capacity'] * 0.8
             if p['stock'] > threshold:
                 self.cumulative_overstock_units += (p['stock'] - threshold)
 
-            # Reward
             p_action = action if p_id == target_p_id else Action(product_id=p_id, action_type='do_nothing')
             reward_dict = compute_reward(obs.dict(), p_action.dict(), demand_met)
             reward_obj = Reward(**reward_dict)
 
-            total_step_reward += reward_obj.value
+            # ✅ FIXED: only accumulation (NO division here)
+            total_step_reward += safe_score(reward_obj.value)
 
             for key in total_step_breakdown:
                 total_step_breakdown[key] += getattr(reward_obj, key)
 
-            # 🔥 FIX: REAL PROFIT (not reward)
             actual_profit = reward_obj.revenue - (
                 reward_obj.restock_cost +
                 reward_obj.storage_cost +
@@ -190,20 +185,17 @@ class InventoryEnv:
 
         next_obs = self._get_full_observation()
 
-        # -------- METRICS --------
         from scenarios import SCENARIO_STATS
         stats = SCENARIO_STATS.get(self.scenario_name, SCENARIO_STATS["easy"])
 
         total_days = stats["days"]
-        current_step = max(1, total_days - self.days_left)  # 🔥 FIX
+        current_step = max(1, total_days - self.days_left)
 
         total_costs = self.cumulative_holding_cost + self.cumulative_stockout_penalty + self.cumulative_overstock_units * 2.0
-
         denominator = self.cumulative_revenue + total_costs + 1e-6
 
         cost_efficiency = (self.cumulative_revenue + 1e-6) / denominator
 
-        # 🔒 HARD CLAMP (FINAL FIX)
         if cost_efficiency >= 1.0:
             cost_efficiency = 0.999
         elif cost_efficiency <= 0.0:
@@ -212,7 +204,7 @@ class InventoryEnv:
         stock_ratio = (self.cumulative_stockouts + 1e-6) / (current_step + 1e-6)
         stock_ratio = max(0.001, min(stock_ratio, 0.999))
 
-        stockout_control = 1.0 - stock_ratio
+        stockout_control = safe_score(1.0 - stock_ratio)
         stockout_control = max(0.001, min(stockout_control, 0.999))
 
         total_capacity = sum(p['conf']['warehouse_capacity'] for p in self.products.values()) * current_step
@@ -220,7 +212,7 @@ class InventoryEnv:
         overstock_ratio = (self.cumulative_overstock_units + 1e-6) / (total_capacity + 1e-6)
         overstock_ratio = max(0.001, min(overstock_ratio, 0.999))
 
-        decision_quality = 1.0 - overstock_ratio
+        decision_quality = safe_score(1.0 - overstock_ratio)
         decision_quality = max(0.001, min(decision_quality, 0.999))
 
         profit_metrics = {
@@ -244,13 +236,11 @@ class InventoryEnv:
         except:
             profit_norm = 0.5
 
-        # 🔒 HARD STABILIZATION (VERY IMPORTANT)
-        if profit_norm != profit_norm:  # NaN check
+        if profit_norm != profit_norm:
             profit_norm = 0.5
 
         profit_norm = max(0.001, min(profit_norm, 0.999))
 
-        # 🔒 FINAL CLAMP (CRITICAL)
         try:
             efficiency_score = float(efficiency_score)
         except:
@@ -281,6 +271,10 @@ class InventoryEnv:
                 "optimal_profit": float(stats["optimal"])
             }
         }
+
+        # ✅ FINAL FIX (CRITICAL)
+        total_step_reward = total_step_reward / max(1, len(self.products))
+        total_step_reward = safe_score(total_step_reward)
 
         return next_obs, total_step_reward, done, info
 
