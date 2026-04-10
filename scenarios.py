@@ -59,37 +59,35 @@ SCENARIO_STATS = {
 }
 
 def compute_weighted_score(profit_metrics, scenario):
-    """
-    Computes final_score = 0.4 * profit_score + 0.25 * cost_efficiency + 0.2 * stockout_control + 0.15 * decision_quality
-    Ensure no default 1.0 used.
-    """
     stats = SCENARIO_STATS.get(scenario, SCENARIO_STATS["easy"])
     
-    # 1. Profit Score (40%)
     baseline = stats["baseline"]
     optimal = stats["optimal"]
     profit = profit_metrics.get('profit', 0)
-    raw_profit_score = (profit - baseline) / (optimal - baseline) if optimal > baseline else 0.0
-    profit_score = max(0.001, min(0.999, raw_profit_score))  # strictly (0, 1)
 
-    cost_eff = max(0.001, min(0.999, profit_metrics.get('cost_efficiency', 0)))
-    stock_ctrl = max(0.001, min(0.999, profit_metrics.get('stockout_control', 0)))
-    dec_qual = max(0.001, min(0.999, profit_metrics.get('decision_quality', 0)))
+    raw_profit_score = (profit - baseline) / (optimal - baseline) if optimal > baseline else 0.5
+    if math.isnan(raw_profit_score) or math.isinf(raw_profit_score):
+        raw_profit_score = 0.5
+
+    profit_score = max(0.011, min(0.989, raw_profit_score))
+
+    cost_eff = max(0.011, min(0.989, profit_metrics.get('cost_efficiency', 0.5)))
+    stock_ctrl = max(0.011, min(0.989, profit_metrics.get('stockout_control', 0.5)))
+    dec_qual = max(0.011, min(0.989, profit_metrics.get('decision_quality', 0.5)))
     
-    # Weighted calculation
     final_score = (
         0.4 * profit_score +
         0.25 * cost_eff +
         0.2 * stock_ctrl +
         0.15 * dec_qual
     )
-    
-    # Final check: Score must be strictly between 0 and 1 (exclusive).
+
     if math.isnan(final_score) or math.isinf(final_score):
         final_score = 0.5
 
-    final_score = max(0.01, min(0.99, final_score))
+    # 🔥 FINAL CLAMP (NO ROUNDING)
     final_score = max(0.011, min(0.989, final_score))
+
     return float(final_score)
 
 def grade_easy(profit_metrics):
