@@ -1,5 +1,6 @@
 import random
 import numpy as np
+import math
 from typing import Optional
 
 random.seed(42)
@@ -9,27 +10,19 @@ from models import Observation, Action, Reward
 from scenarios import get_scenario_config
 from reward import compute_reward
 
+
 def safe_score(x):
-    import math
     try:
         x = float(x)
-    except:
+    except Exception:
         x = 0.5
-
     if math.isnan(x) or math.isinf(x):
-        x = 0.5
-
-    if x <= 0.0:
-        return 0.01
-    elif x >= 1.0:
-        return 0.99
-    return x
+        return 0.5
+    return max(0.01, min(0.99, x))
 
 
 class InventoryEnv:
-    """
-    Auxon Inventory Optimization - Multi-Product RL Environment
-    """
+    """Auxon Inventory Optimization - Multi-Product RL Environment"""
 
     def __init__(self, scenario_name="easy"):
         self.scenario_name = scenario_name
@@ -38,15 +31,12 @@ class InventoryEnv:
         self.reset()
 
     def reset(self, seed: Optional[int] = None):
-        """Initialize state with reproducibility"""
         if seed is not None:
             random.seed(seed)
             np.random.seed(seed)
             self.rng = np.random.default_rng(seed)
 
         self.days_left = self.config['days']
-
-        # 🔥 FIX: reset all metrics cleanly
         self.total_profit = 0.0
         self.cumulative_revenue = 0.0
         self.cumulative_holding_cost = 0.0
@@ -55,7 +45,6 @@ class InventoryEnv:
         self.cumulative_overstock_units = 0
 
         self.products = {}
-
         for p_conf in self.config['products']:
             self.products[p_conf['id']] = {
                 "conf": p_conf,
@@ -80,7 +69,6 @@ class InventoryEnv:
 
         noise = self.rng.integers(-30, 61)
         fluct_offset = self.rng.integers(-fluctuation, fluctuation + 1) if fluctuation > 0 else 0
-
         demand_rate = max(0, base + noise + fluct_offset * (1.0 - price_effect))
 
         if self.config.get('event_chance') and self.rng.random() < self.config['event_chance']:
@@ -112,35 +100,30 @@ class InventoryEnv:
 
             if action.action_type == 'restock':
                 p['stock'] = min(p['conf']['warehouse_capacity'], p['stock'] + action.quantity)
-
             elif action.action_type == 'reduce_price':
                 p['price'] = max(p['conf']['product_price'] * 0.5,
                                  p['price'] * (1 - action.percentage))
-
             elif action.action_type == 'increase_price':
                 p['price'] = min(p['conf']['product_price'] * 5.0,
                                  p['price'] * (1 + action.percentage))
-
             elif action.action_type == 'transfer_warehouse':
                 p['stock'] = max(0, p['stock'] - action.quantity)
 
-        total_step_reward = 0
+        total_step_reward = 0.0
         total_step_breakdown = {
-            "revenue": 0,
-            "restock_cost": 0,
-            "storage_cost": 0,
-            "stockout_penalty": 0,
-            "overstock_penalty": 0,
-            "transfer_cost": 0
+            "revenue": 0.0,
+            "restock_cost": 0.0,
+            "storage_cost": 0.0,
+            "stockout_penalty": 0.0,
+            "overstock_penalty": 0.0,
+            "transfer_cost": 0.0
         }
 
         current_obs = {p_id: self._get_product_observation(p_id) for p_id in self.products}
-
         any_stockout = False
 
         for p_id, p in self.products.items():
             obs = current_obs[p_id]
-
             demand = obs.demand_rate
             demand_met = min(p['stock'], demand)
 
@@ -156,26 +139,30 @@ class InventoryEnv:
 
             p_action = action if p_id == target_p_id else Action(product_id=p_id, action_type='do_nothing')
             reward_dict = compute_reward(obs.dict(), p_action.dict(), demand_met)
-            reward_obj = Reward(**reward_dict)
 
-            # ✅ FIXED: only accumulation (NO division here)
-            total_step_reward += safe_score(reward_obj.value)
+            # ✅ FIX 1: Use reward_dict directly (dict), not Reward model
+            # which may not have "score" field — access safely
+            raw_value = reward_dict.get("value", 0.0)
+            step_score = reward_dict.get("score", safe_score(raw_value))
+            
+            # ✅ FIX 2: Accumulate the normalized score, not raw value
+            total_step_reward += safe_score(step_score)
 
             for key in total_step_breakdown:
-                total_step_breakdown[key] += getattr(reward_obj, key)
+                total_step_breakdown[key] += float(reward_dict.get(key, 0.0))
 
-            actual_profit = reward_obj.revenue - (
-                reward_obj.restock_cost +
-                reward_obj.storage_cost +
-                reward_obj.stockout_penalty +
-                reward_obj.overstock_penalty +
-                reward_obj.transfer_cost
+            actual_profit = reward_dict.get("revenue", 0.0) - (
+                reward_dict.get("restock_cost", 0.0) +
+                reward_dict.get("storage_cost", 0.0) +
+                reward_dict.get("stockout_penalty", 0.0) +
+                reward_dict.get("overstock_penalty", 0.0) +
+                reward_dict.get("transfer_cost", 0.0)
             )
 
             self.total_profit += actual_profit
-            self.cumulative_revenue += reward_obj.revenue
-            self.cumulative_holding_cost += reward_obj.storage_cost
-            self.cumulative_stockout_penalty += reward_obj.stockout_penalty
+            self.cumulative_revenue += reward_dict.get("revenue", 0.0)
+            self.cumulative_holding_cost += reward_dict.get("storage_cost", 0.0)
+            self.cumulative_stockout_penalty += reward_dict.get("stockout_penalty", 0.0)
 
         if any_stockout:
             self.cumulative_stockouts += 1
@@ -191,29 +178,27 @@ class InventoryEnv:
         total_days = stats["days"]
         current_step = max(1, total_days - self.days_left)
 
-        total_costs = self.cumulative_holding_cost + self.cumulative_stockout_penalty + self.cumulative_overstock_units * 2.0
+        total_costs = (
+            self.cumulative_holding_cost +
+            self.cumulative_stockout_penalty +
+            self.cumulative_overstock_units * 2.0
+        )
         denominator = self.cumulative_revenue + total_costs + 1e-6
-
         cost_efficiency = (self.cumulative_revenue + 1e-6) / denominator
 
-        if cost_efficiency >= 1.0:
-            cost_efficiency = 0.999
-        elif cost_efficiency <= 0.0:
-            cost_efficiency = 0.001
+        # ✅ FIX 3: strict clamp — never exactly 0.0 or 1.0
+        cost_efficiency = max(0.01, min(0.99, float(cost_efficiency)))
 
         stock_ratio = (self.cumulative_stockouts + 1e-6) / (current_step + 1e-6)
         stock_ratio = max(0.001, min(stock_ratio, 0.999))
+        stockout_control = max(0.01, min(0.99, 1.0 - stock_ratio))
 
-        stockout_control = safe_score(1.0 - stock_ratio)
-        stockout_control = max(0.001, min(stockout_control, 0.999))
-
-        total_capacity = sum(p['conf']['warehouse_capacity'] for p in self.products.values()) * current_step
-
+        total_capacity = sum(
+            p['conf']['warehouse_capacity'] for p in self.products.values()
+        ) * current_step
         overstock_ratio = (self.cumulative_overstock_units + 1e-6) / (total_capacity + 1e-6)
         overstock_ratio = max(0.001, min(overstock_ratio, 0.999))
-
-        decision_quality = safe_score(1.0 - overstock_ratio)
-        decision_quality = max(0.001, min(decision_quality, 0.999))
+        decision_quality = max(0.01, min(0.99, 1.0 - overstock_ratio))
 
         profit_metrics = {
             "profit": float(self.total_profit),
@@ -232,32 +217,34 @@ class InventoryEnv:
             efficiency_score = grade_hard(profit_metrics)
 
         try:
-            profit_norm = (self.total_profit - stats["baseline"]) / (stats["optimal"] - stats["baseline"] + 1e-6)
-        except:
+            profit_norm = (self.total_profit - stats["baseline"]) / (
+                stats["optimal"] - stats["baseline"] + 1e-6
+            )
+        except Exception:
             profit_norm = 0.5
 
-        if profit_norm != profit_norm:
+        # ✅ FIX 4: NaN guard + strict clamp
+        if math.isnan(profit_norm) or math.isinf(profit_norm):
             profit_norm = 0.5
-
-        profit_norm = max(0.001, min(profit_norm, 0.999))
+        profit_norm = max(0.01, min(0.99, profit_norm))
 
         try:
             efficiency_score = float(efficiency_score)
-        except:
+        except Exception:
             efficiency_score = 0.5
 
-        if efficiency_score <= 0.0:
-            efficiency_score = 0.01
-        elif efficiency_score >= 1.0:
-            efficiency_score = 0.99
+        # ✅ FIX 5: strict clamp on efficiency_score
+        if math.isnan(efficiency_score) or math.isinf(efficiency_score):
+            efficiency_score = 0.5
+        efficiency_score = max(0.01, min(0.99, efficiency_score))
 
         info = {
             "total_profit": float(self.total_profit),
             "step_reward_breakdown": {
-                    "profit_score": safe_score(profit_norm),
-                    "cost_efficiency": safe_score(cost_efficiency),
-                    "stockout_control": safe_score(stockout_control),
-                    "decision_quality": safe_score(decision_quality)
+                "profit_score": safe_score(profit_norm),
+                "cost_efficiency": safe_score(cost_efficiency),
+                "stockout_control": safe_score(stockout_control),
+                "decision_quality": safe_score(decision_quality)
             },
             "cumulative_stats": {
                 "revenue": float(self.cumulative_revenue),
@@ -265,16 +252,16 @@ class InventoryEnv:
                 "stockout_penalty": float(self.cumulative_stockout_penalty),
                 "stockout_days": self.cumulative_stockouts,
                 "overstock_units": int(self.cumulative_overstock_units),
-                "efficiency_score": efficiency_score,
+                "efficiency_score": efficiency_score,   # ✅ already clamped above
                 "profit_metrics": profit_metrics,
                 "baseline_profit": float(stats["baseline"]),
                 "optimal_profit": float(stats["optimal"])
             }
         }
 
-        # ✅ FINAL FIX (CRITICAL)
+        # ✅ FIX 6: final step reward — average + strict clamp
         total_step_reward = total_step_reward / max(1, len(self.products))
-        total_step_reward = safe_score(total_step_reward)
+        total_step_reward = max(0.01, min(0.99, total_step_reward))
 
         return next_obs, total_step_reward, done, info
 
