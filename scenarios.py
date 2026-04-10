@@ -89,7 +89,8 @@ def compute_weighted_score(profit_metrics, scenario):
         final_score = 0.5
 
     final_score = max(0.01, min(0.99, final_score))
-    return round(final_score, 4)
+    final_score = max(0.011, min(0.989, final_score))
+    return float(final_score)
 
 def grade_easy(profit_metrics):
     score = compute_weighted_score(profit_metrics, "easy")
