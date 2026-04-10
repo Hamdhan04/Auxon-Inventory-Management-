@@ -14,6 +14,24 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 if not HF_TOKEN:
     pass
 
+
+# 🔒 GLOBAL SAFE FUNCTION (extra protection)
+def safe_score(x):
+    try:
+        x = float(x)
+    except:
+        x = 0.5
+
+    if math.isnan(x) or math.isinf(x):
+        x = 0.5
+
+    if x <= 0.0:
+        return 0.01
+    elif x >= 1.0:
+        return 0.99
+    return x
+
+
 def run_scenario(client, scenario_id, seed=42):
     env_name = "auxon-inventory-v1"
     
@@ -68,20 +86,38 @@ def run_scenario(client, scenario_id, seed=42):
                 current_normalized_reward = info.get("cumulative_stats", {}).get("efficiency_score", 0.5)
                 if math.isnan(float(current_normalized_reward)) or math.isinf(float(current_normalized_reward)):
                     current_normalized_reward = 0.5
-                current_normalized_reward = max(0.011, min(0.989, float(current_normalized_reward)))
+                current_normalized_reward = safe_score(current_normalized_reward)
             else:
                 step_profit = info.get("total_profit", 0)
                 baseline = info.get("cumulative_stats", {}).get("baseline_profit", 800)
                 optimal = info.get("cumulative_stats", {}).get("optimal_profit", 2200)
                 raw = (step_profit - baseline) / (optimal - baseline + 1e-6)
+                
                 if math.isnan(raw) or math.isinf(raw):
                     raw = 0.5
-                current_normalized_reward = max(0.011, min(0.989, float(raw)))
-            
-            rewards_history.append(current_normalized_reward)
+                
+                current_normalized_reward = safe_score(raw)
+
+            # 🔒 FINAL HARD CLAMP (extra safety)
+            if current_normalized_reward <= 0.0:
+                current_normalized_reward = 0.01
+            elif current_normalized_reward >= 1.0:
+                current_normalized_reward = 0.99
+
+            # ✅ SAFE APPEND
+            safe_reward = safe_score(current_normalized_reward)
+            rewards_history.append(safe_reward)
             
             done_str = "true" if env_done else "false"
-            print(f"[STEP] step={step_count} action={action_type} reward={current_normalized_reward:.2f} done={done_str} error={last_error}")
+
+            # ✅ SAFE PRINT (NO ROUNDING BUG)
+            safe_print_reward = safe_score(current_normalized_reward)
+            print(
+                f"[STEP] step={step_count} "
+                f"action={action_type} "
+                f"reward={safe_print_reward:.3f} "
+                f"done={done_str} error={last_error}"
+            )
 
             if env_done:
                 done = True
@@ -92,10 +128,14 @@ def run_scenario(client, scenario_id, seed=42):
         last_error = str(e).replace("\n", " ")
         success = False
     
-    formatted_rewards = ",".join([f"{min(0.989, max(0.011, r)):.3f}" for r in rewards_history])
+    # ✅ FINAL OUTPUT SAFETY (CRITICAL)
+    formatted_rewards = ",".join([
+        f"{safe_score(r):.3f}" for r in rewards_history
+    ])
     
     success_str = "true" if success else "false"
     print(f"[END] success={success_str} steps={step_count} rewards={formatted_rewards}")
+
 
 def main():
     if not HF_TOKEN:
@@ -113,6 +153,7 @@ def main():
 
     for scenario in ["easy", "medium", "hard"]:
         run_scenario(client, scenario, seed=seed)
+
 
 if __name__ == "__main__":
     main()
