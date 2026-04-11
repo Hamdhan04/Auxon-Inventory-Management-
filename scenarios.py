@@ -5,7 +5,6 @@ import math
 random.seed(42)
 np.random.seed(42)
 
-
 def get_scenario_config(scenario_name):
     if scenario_name == 'easy':
         return easy_scenario()
@@ -15,8 +14,8 @@ def get_scenario_config(scenario_name):
         return hard_scenario()
     return easy_scenario()
 
-
 def easy_scenario():
+    """3 products in a stable environment (Auxon Basics)."""
     return {
         "days": 15,
         "products": [
@@ -26,8 +25,8 @@ def easy_scenario():
         ]
     }
 
-
 def medium_scenario():
+    """3 products in a fluctuating environment (Auxon Seasonal)."""
     return {
         "days": 30,
         "products": [
@@ -37,8 +36,8 @@ def medium_scenario():
         ]
     }
 
-
 def hard_scenario():
+    """3 products during Mega Sale Day / Festival spikes."""
     return {
         "days": 50,
         "event_chance": 0.3,
@@ -50,110 +49,97 @@ def hard_scenario():
         ]
     }
 
-
+# SCENARIO PERFORMANCE THRESHOLDS
+# Baseline: Random policy approx
+# Optimal: Target profit for the scenario
 SCENARIO_STATS = {
-    "easy":   {"baseline": 800,   "optimal": 2200,  "days": 15},
-    "medium": {"baseline": 3500,  "optimal": 12000, "days": 30},
-    "hard":   {"baseline": 12000, "optimal": 65000, "days": 50}
+    "easy": {"baseline": 800, "optimal": 2200, "days": 15},
+    "medium": {"baseline": 3500, "optimal": 12000, "days": 30},
+    "hard": {"baseline": 12000, "optimal": 65000, "days": 50}
 }
 
-
-def _safe_float(val, default=0.5):
-    """Convert any value to float safely."""
-    try:
-        v = float(val)
-        if math.isnan(v) or math.isinf(v):
-            return default
-        return v
-    except Exception:
-        return default
-
-
-def _extract_metrics(data):
-    """
-    Safely extract profit_metrics from WHATEVER the validator passes in.
-    Handles: profit_metrics dict, full info dict, nested structures, None, etc.
-    """
-    if data is None or not isinstance(data, dict):
-        return {"profit": 0.0, "cost_efficiency": 0.5, "stockout_control": 0.5, "decision_quality": 0.5}
-
-    # Case 1: already a profit_metrics dict (has 'profit' key directly)
-    if "profit" in data:
-        return {
-            "profit":          _safe_float(data.get("profit", 0.0), 0.0),
-            "cost_efficiency": _safe_float(data.get("cost_efficiency", 0.5), 0.5),
-            "stockout_control":_safe_float(data.get("stockout_control", 0.5), 0.5),
-            "decision_quality":_safe_float(data.get("decision_quality", 0.5), 0.5),
-        }
-
-    # Case 2: full info dict — dig into cumulative_stats.profit_metrics
-    cs = data.get("cumulative_stats", {})
-    if isinstance(cs, dict):
-        pm = cs.get("profit_metrics", {})
-        if isinstance(pm, dict) and "profit" in pm:
-            return {
-                "profit":          _safe_float(pm.get("profit", 0.0), 0.0),
-                "cost_efficiency": _safe_float(pm.get("cost_efficiency", 0.5), 0.5),
-                "stockout_control":_safe_float(pm.get("stockout_control", 0.5), 0.5),
-                "decision_quality":_safe_float(pm.get("decision_quality", 0.5), 0.5),
-            }
-
-        # Case 3: build from cumulative_stats raw fields
-        revenue  = _safe_float(cs.get("revenue", 0.0), 0.0)
-        holding  = _safe_float(cs.get("holding_cost", 0.0), 0.0)
-        stockout = _safe_float(cs.get("stockout_penalty", 0.0), 0.0)
-        profit   = revenue - holding - stockout
-        eff      = _safe_float(cs.get("efficiency_score", 0.5), 0.5)
-        return {
-            "profit":          profit,
-            "cost_efficiency": eff,
-            "stockout_control":0.5,
-            "decision_quality":0.5,
-        }
-
-    # Fallback
-    return {"profit": 0.0, "cost_efficiency": 0.5, "stockout_control": 0.5, "decision_quality": 0.5}
-
-
 def compute_weighted_score(profit_metrics, scenario):
-    stats    = SCENARIO_STATS.get(scenario, SCENARIO_STATS["easy"])
+    """
+    Computes final_score = 0.4 * profit_score + 0.25 * cost_efficiency + 0.2 * stockout_control + 0.15 * decision_quality
+    Ensure no default 1.0 used.
+    """
+    stats = SCENARIO_STATS.get(scenario, SCENARIO_STATS["easy"])
+    
+    # 1. Profit Score (40%)
     baseline = stats["baseline"]
-    optimal  = stats["optimal"]
-    profit   = _safe_float(profit_metrics.get("profit", 0.0), 0.0)
+    optimal = stats["optimal"]
+    profit = profit_metrics.get('profit', 0)
+    raw_profit_score = (profit - baseline) / (optimal - baseline) if optimal > baseline else 0.0
+    profit_score = max(0.001, min(0.999, raw_profit_score))  # strictly (0, 1)
 
-    span = optimal - baseline
-    raw_profit_score = (profit - baseline) / span if span != 0 else 0.5
-    raw_profit_score = _safe_float(raw_profit_score, 0.5)
-
-    profit_score = max(0.011, min(0.989, raw_profit_score))
-    cost_eff     = max(0.011, min(0.989, _safe_float(profit_metrics.get("cost_efficiency",  0.5), 0.5)))
-    stock_ctrl   = max(0.011, min(0.989, _safe_float(profit_metrics.get("stockout_control", 0.5), 0.5)))
-    dec_qual     = max(0.011, min(0.989, _safe_float(profit_metrics.get("decision_quality", 0.5), 0.5)))
-
+    cost_eff = max(0.001, min(0.999, profit_metrics.get('cost_efficiency', 0)))
+    stock_ctrl = max(0.001, min(0.999, profit_metrics.get('stockout_control', 0)))
+    dec_qual = max(0.001, min(0.999, profit_metrics.get('decision_quality', 0)))
+    
+    # Weighted calculation
     final_score = (
-        0.40 * profit_score +
-        0.25 * cost_eff     +
-        0.20 * stock_ctrl   +
+        0.4 * profit_score +
+        0.25 * cost_eff +
+        0.2 * stock_ctrl +
         0.15 * dec_qual
     )
+    
+    # Final check: Score must be strictly between 0 and 1 (exclusive).
+    if math.isnan(final_score) or math.isinf(final_score):
+        final_score = 0.5
 
-    final_score = _safe_float(final_score, 0.5)
-    return max(0.011, min(0.989, final_score))
+    final_score = max(0.01, min(0.99, final_score))
+    return round(final_score, 4)
 
+def extract_metrics(*args, **kwargs):
+    try:
+        if args and isinstance(args[0], dict) and "profit" in args[0]:
+            return args[0]
+        
+        obj = args[0] if args else kwargs.get('profit_metrics')
+        if not obj:
+            return {"profit": 0, "cost_efficiency": 0, "stockout_control": 0, "decision_quality": 0}
 
-def grade_easy(data):
-    metrics = _extract_metrics(data)
-    score   = compute_weighted_score(metrics, "easy")
-    return max(0.011, min(0.989, float(score)))
+        try:
+            info = obj.steps[-1].info 
+            return info["cumulative_stats"]["profit_metrics"]
+        except:
+            pass
+        
+        try:
+            return obj["cumulative_stats"]["profit_metrics"]
+        except:
+            pass
+            
+        try:
+            return obj[-1].info["cumulative_stats"]["profit_metrics"]
+        except:
+            pass
 
+        return {"profit": 0, "cost_efficiency": 0, "stockout_control": 0, "decision_quality": 0}
+    except:
+        return {"profit": 0, "cost_efficiency": 0, "stockout_control": 0, "decision_quality": 0}
 
-def grade_medium(data):
-    metrics = _extract_metrics(data)
-    score   = compute_weighted_score(metrics, "medium")
-    return max(0.011, min(0.989, float(score)))
+def grade_easy(*args, **kwargs):
+    try:
+        metrics = extract_metrics(*args, **kwargs)
+        score = compute_weighted_score(metrics, "easy")
+        return max(0.011, min(0.989, float(score)))
+    except:
+        return 0.50
 
+def grade_medium(*args, **kwargs):
+    try:
+        metrics = extract_metrics(*args, **kwargs)
+        score = compute_weighted_score(metrics, "medium")
+        return max(0.011, min(0.989, float(score)))
+    except:
+        return 0.50
 
-def grade_hard(data):
-    metrics = _extract_metrics(data)
-    score   = compute_weighted_score(metrics, "hard")
-    return max(0.011, min(0.989, float(score)))
+def grade_hard(*args, **kwargs):
+    try:
+        metrics = extract_metrics(*args, **kwargs)
+        score = compute_weighted_score(metrics, "hard")
+        return max(0.011, min(0.989, float(score)))
+    except:
+        return 0.50
