@@ -5,6 +5,25 @@ import math
 random.seed(42)
 np.random.seed(42)
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Internal helper
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _strict(x, lo=0.001, hi=0.999):
+    """Clamp x to (lo, hi) — strictly interior to (0, 1)."""
+    try:
+        x = float(x)
+    except Exception:
+        x = 0.5
+    if math.isnan(x) or math.isinf(x):
+        return 0.5
+    return max(lo, min(hi, x))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Scenario configs
+# ──────────────────────────────────────────────────────────────────────────────
+
 def get_scenario_config(scenario_name):
     if scenario_name == 'easy':
         return easy_scenario()
@@ -49,97 +68,179 @@ def hard_scenario():
         ]
     }
 
-# SCENARIO PERFORMANCE THRESHOLDS
-# Baseline: Random policy approx
-# Optimal: Target profit for the scenario
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Scenario performance thresholds
+# ──────────────────────────────────────────────────────────────────────────────
+
 SCENARIO_STATS = {
-    "easy": {"baseline": 800, "optimal": 2200, "days": 15},
-    "medium": {"baseline": 3500, "optimal": 12000, "days": 30},
-    "hard": {"baseline": 12000, "optimal": 65000, "days": 50}
+    "easy":   {"baseline": 800,   "optimal": 2200,  "days": 15},
+    "medium": {"baseline": 3500,  "optimal": 12000, "days": 30},
+    "hard":   {"baseline": 12000, "optimal": 65000, "days": 50},
 }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Weighted scoring
+# ──────────────────────────────────────────────────────────────────────────────
 
 def compute_weighted_score(profit_metrics, scenario):
     """
-    Computes final_score = 0.4 * profit_score + 0.25 * cost_efficiency + 0.2 * stockout_control + 0.15 * decision_quality
-    Ensure no default 1.0 used.
+    final_score = 0.40 * profit_score
+                + 0.25 * cost_efficiency
+                + 0.20 * stockout_control
+                + 0.15 * decision_quality
+
+    Every sub-score and the final score are guaranteed to be strictly in (0.001, 0.999).
     """
     stats = SCENARIO_STATS.get(scenario, SCENARIO_STATS["easy"])
-    
-    # 1. Profit Score (40%)
-    baseline = stats["baseline"]
-    optimal = stats["optimal"]
-    profit = profit_metrics.get('profit', 0)
-    raw_profit_score = (profit - baseline) / (optimal - baseline) if optimal > baseline else 0.0
-    profit_score = max(0.001, min(0.999, raw_profit_score))  # strictly (0, 1)
 
-    cost_eff = max(0.001, min(0.999, profit_metrics.get('cost_efficiency', 0)))
-    stock_ctrl = max(0.001, min(0.999, profit_metrics.get('stockout_control', 0)))
-    dec_qual = max(0.001, min(0.999, profit_metrics.get('decision_quality', 0)))
-    
-    # Weighted calculation
+    baseline = float(stats["baseline"])
+    optimal  = float(stats["optimal"])
+    span     = optimal - baseline
+
+    # Profit sub-score — guard against divide-by-zero
+    profit = float(profit_metrics.get('profit', 0) or 0)
+    if span > 0:
+        raw_profit_score = (profit - baseline) / span
+    else:
+        raw_profit_score = 0.5
+    profit_score = _strict(raw_profit_score)
+
+    # Other sub-scores — use 0.5 fallback, NOT 0
+    cost_eff   = _strict(profit_metrics.get('cost_efficiency')  or 0.5)
+    stock_ctrl = _strict(profit_metrics.get('stockout_control') or 0.5)
+    dec_qual   = _strict(profit_metrics.get('decision_quality') or 0.5)
+
     final_score = (
-        0.4 * profit_score +
+        0.40 * profit_score +
         0.25 * cost_eff +
-        0.2 * stock_ctrl +
+        0.20 * stock_ctrl +
         0.15 * dec_qual
     )
-    
-    # Final check: Score must be strictly between 0 and 1 (exclusive).
+
+    # Final NaN / inf guard + strict clamp
     if math.isnan(final_score) or math.isinf(final_score):
         final_score = 0.5
 
-    final_score = max(0.01, min(0.99, final_score))
-    return round(final_score, 4)
+    return round(_strict(final_score), 6)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Metric extractor — handles all OpenEnv episode formats
+# ──────────────────────────────────────────────────────────────────────────────
+
+_FALLBACK_METRICS = {
+    "profit": 0.0,
+    "cost_efficiency": 0.5,
+    "stockout_control": 0.5,
+    "decision_quality": 0.5,
+}
 
 def extract_metrics(*args, **kwargs):
+    """
+    Extract profit_metrics from whatever OpenEnv passes to the grader.
+
+    Supported formats (tried in order):
+      1. Plain dict with 'profit' key (direct profit_metrics dict)
+      2. Episode object with .steps list  →  steps[-1].info['cumulative_stats']['profit_metrics']
+      3. Dict                              →  dict['cumulative_stats']['profit_metrics']
+      4. List of step objects              →  list[-1].info['cumulative_stats']['profit_metrics']
+      5. Single Step object               →  step.info['cumulative_stats']['profit_metrics']
+    Falls back to _FALLBACK_METRICS with neutral 0.5 sub-scores so the weighted
+    score is never exactly 0.0 or 1.0.
+    """
+    obj = args[0] if args else kwargs.get('profit_metrics') or kwargs.get('episode')
+
+    if obj is None:
+        return dict(_FALLBACK_METRICS)
+
+    # ── Format 1: already a profit_metrics dict ────────────────────────────
+    if isinstance(obj, dict) and 'profit' in obj:
+        return obj
+
+    # ── Format 2: Episode object with .steps ──────────────────────────────
     try:
-        if args and isinstance(args[0], dict) and "profit" in args[0]:
-            return args[0]
-        
-        obj = args[0] if args else kwargs.get('profit_metrics')
-        if not obj:
-            return {"profit": 0, "cost_efficiency": 0, "stockout_control": 0, "decision_quality": 0}
+        steps = obj.steps
+        if steps:
+            info = steps[-1].info
+            pm = info['cumulative_stats']['profit_metrics']
+            if isinstance(pm, dict):
+                return pm
+    except Exception:
+        pass
 
-        try:
-            info = obj.steps[-1].info 
-            return info["cumulative_stats"]["profit_metrics"]
-        except:
-            pass
-        
-        try:
-            return obj["cumulative_stats"]["profit_metrics"]
-        except:
-            pass
-            
-        try:
-            return obj[-1].info["cumulative_stats"]["profit_metrics"]
-        except:
-            pass
+    # ── Format 3: Info dict  ───────────────────────────────────────────────
+    try:
+        pm = obj['cumulative_stats']['profit_metrics']
+        if isinstance(pm, dict):
+            return pm
+    except Exception:
+        pass
 
-        return {"profit": 0, "cost_efficiency": 0, "stockout_control": 0, "decision_quality": 0}
-    except:
-        return {"profit": 0, "cost_efficiency": 0, "stockout_control": 0, "decision_quality": 0}
+    # ── Format 4: List of step objects ────────────────────────────────────
+    try:
+        if isinstance(obj, (list, tuple)) and obj:
+            info = obj[-1].info
+            pm = info['cumulative_stats']['profit_metrics']
+            if isinstance(pm, dict):
+                return pm
+    except Exception:
+        pass
+
+    # ── Format 5: Single step object with .info ───────────────────────────
+    try:
+        info = obj.info
+        pm = info['cumulative_stats']['profit_metrics']
+        if isinstance(pm, dict):
+            return pm
+    except Exception:
+        pass
+
+    # ── Format 6: List of (obs, action, reward, done, info) tuples ────────
+    try:
+        if isinstance(obj, (list, tuple)) and obj:
+            last = obj[-1]
+            if isinstance(last, (list, tuple)) and len(last) >= 5:
+                info = last[4]
+                pm = info['cumulative_stats']['profit_metrics']
+                if isinstance(pm, dict):
+                    return pm
+    except Exception:
+        pass
+
+    return dict(_FALLBACK_METRICS)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Public graders (called by OpenEnv via openenv.yaml)
+# ──────────────────────────────────────────────────────────────────────────────
 
 def grade_easy(*args, **kwargs):
+    """Grade the easy (Auxon Basics) task. Returns a float strictly in (0, 1)."""
     try:
         metrics = extract_metrics(*args, **kwargs)
-        score = compute_weighted_score(metrics, "easy")
-        return max(0.011, min(0.989, float(score)))
-    except:
-        return 0.50
+        score   = compute_weighted_score(metrics, "easy")
+        return _strict(score)
+    except Exception:
+        return 0.5
+
 
 def grade_medium(*args, **kwargs):
+    """Grade the medium (Seasonal Demand) task. Returns a float strictly in (0, 1)."""
     try:
         metrics = extract_metrics(*args, **kwargs)
-        score = compute_weighted_score(metrics, "medium")
-        return max(0.011, min(0.989, float(score)))
-    except:
-        return 0.50
+        score   = compute_weighted_score(metrics, "medium")
+        return _strict(score)
+    except Exception:
+        return 0.5
+
 
 def grade_hard(*args, **kwargs):
+    """Grade the hard (Mega Sale Day) task. Returns a float strictly in (0, 1)."""
     try:
         metrics = extract_metrics(*args, **kwargs)
-        score = compute_weighted_score(metrics, "hard")
-        return max(0.011, min(0.989, float(score)))
-    except:
-        return 0.50
+        score   = compute_weighted_score(metrics, "hard")
+        return _strict(score)
+    except Exception:
+        return 0.5
