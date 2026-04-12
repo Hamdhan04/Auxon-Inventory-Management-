@@ -18,7 +18,8 @@ def safe_score(x):
         x = 0.5
     if math.isnan(x) or math.isinf(x):
         return 0.5
-    return max(0.01, min(0.99, x))
+    # strictly interior to (0, 1) — clamp bounds are 0.001 / 0.999
+    return max(0.001, min(0.999, x))
 
 
 class InventoryEnv:
@@ -186,19 +187,19 @@ class InventoryEnv:
         denominator = self.cumulative_revenue + total_costs + 1e-6
         cost_efficiency = (self.cumulative_revenue + 1e-6) / denominator
 
-        # ✅ FIX 3: strict clamp — never exactly 0.0 or 1.0
-        cost_efficiency = max(0.01, min(0.99, float(cost_efficiency)))
+        # ✅ FIX 3: strict clamp — bounds 0.001/0.999, never exactly 0.0 or 1.0
+        cost_efficiency = max(0.001, min(0.999, float(cost_efficiency)))
 
         stock_ratio = (self.cumulative_stockouts + 1e-6) / (current_step + 1e-6)
         stock_ratio = max(0.001, min(stock_ratio, 0.999))
-        stockout_control = max(0.01, min(0.99, 1.0 - stock_ratio))
+        stockout_control = max(0.001, min(0.999, 1.0 - stock_ratio))
 
         total_capacity = sum(
             p['conf']['warehouse_capacity'] for p in self.products.values()
         ) * current_step
         overstock_ratio = (self.cumulative_overstock_units + 1e-6) / (total_capacity + 1e-6)
         overstock_ratio = max(0.001, min(overstock_ratio, 0.999))
-        decision_quality = max(0.01, min(0.99, 1.0 - overstock_ratio))
+        decision_quality = max(0.001, min(0.999, 1.0 - overstock_ratio))
 
         profit_metrics = {
             "profit": float(self.total_profit),
@@ -223,20 +224,20 @@ class InventoryEnv:
         except Exception:
             profit_norm = 0.5
 
-        # ✅ FIX 4: NaN guard + strict clamp
+        # ✅ FIX 4: NaN guard + strict clamp (0.001 / 0.999)
         if math.isnan(profit_norm) or math.isinf(profit_norm):
             profit_norm = 0.5
-        profit_norm = max(0.01, min(0.99, profit_norm))
+        profit_norm = max(0.001, min(0.999, profit_norm))
 
         try:
             efficiency_score = float(efficiency_score)
         except Exception:
             efficiency_score = 0.5
 
-        # ✅ FIX 5: strict clamp on efficiency_score
+        # ✅ FIX 5: strict clamp on efficiency_score (0.001 / 0.999)
         if math.isnan(efficiency_score) or math.isinf(efficiency_score):
             efficiency_score = 0.5
-        efficiency_score = max(0.01, min(0.99, efficiency_score))
+        efficiency_score = max(0.001, min(0.999, efficiency_score))
 
         info = {
             "total_profit": float(self.total_profit),
@@ -259,9 +260,9 @@ class InventoryEnv:
             }
         }
 
-        # ✅ FIX 6: final step reward — average + strict clamp
+        # ✅ FIX 6: final step reward — average + strict clamp (0.001 / 0.999)
         total_step_reward = total_step_reward / max(1, len(self.products))
-        total_step_reward = max(0.01, min(0.99, total_step_reward))
+        total_step_reward = max(0.001, min(0.999, total_step_reward))
 
         return next_obs, total_step_reward, done, info
 
