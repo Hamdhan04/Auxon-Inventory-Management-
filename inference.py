@@ -12,29 +12,25 @@ HF_TOKEN     = os.getenv("HF_TOKEN")
 
 
 def safe_score(x):
+    """Clamp x to strictly (0.001, 0.999) — never exactly 0 or 1."""
     try:
         x = float(x)
     except Exception:
         x = 0.5
     if math.isnan(x) or math.isinf(x):
         return 0.5
-    # Use 0.011 / 0.989 so 3-decimal print never shows 0.000 or 1.000
-    return max(0.011, min(0.989, x))
+    return max(0.001, min(0.999, x))
 
 
 def fmt(r):
     """Format reward ensuring it never prints as 0.000 or 1.000."""
-    v = round(safe_score(r), 3)
-    if v <= 0.0:
-        v = 0.011
-    if v >= 1.0:
-        v = 0.989
-    # Extra guard: re-check after rounding
+    v = safe_score(r)
+    # Additional rounding safety: push away from printed 0.000 / 1.000
     s = f"{v:.3f}"
     if s == "0.000":
-        s = "0.011"
+        s = "0.001"
     if s == "1.000":
-        s = "0.989"
+        s = "0.999"
     return s
 
 
